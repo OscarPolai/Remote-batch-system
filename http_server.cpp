@@ -42,7 +42,7 @@ private:
     std::istringstream iss(REQUEST_URI);  // set iss is REQUEST_URI ( ./console.cgi?h0=nplinux1.cs.nctu.edu.tw&p0...)
 
     
-    getline(iss, REQUEST_URI, '?');  // overwrite REQUEST_URI from ? in the iss string.
+    getline(iss, REQUEST_URI, '?');  // Extract iss string until ? and overwrite into REQUEST_URI
 	  getline(iss, QUERY_STRING); 
 
     SERVER_ADDR = socket_.local_endpoint().address().to_string();
@@ -53,10 +53,16 @@ private:
 
     setenv("REQUEST_URI", REQUEST_URI.c_str(), 1);
     setenv("REQUEST_METHOD", REQUEST_METHOD.c_str(), 1);
+    setenv("SERVER_PROTOCOL", SERVER_PROTOCOL.c_str(), 1);
     setenv("HTTP_HOST", HTTP_HOST.c_str(), 1);
     setenv("QUERY_STRING", QUERY_STRING.c_str(), 1);
+
     setenv("SERVER_ADDR", SERVER_ADDR.c_str(), 1);
     setenv("REMOTE_ADDR", REMOTE_ADDR.c_str(), 1);
+
+    setenv("SERVER_PORT", SERVER_PORT.c_str(), 1);
+    setenv("REMOTE_PORT", REMOTE_PORT.c_str(), 1);
+
 
   }
 
@@ -75,9 +81,9 @@ private:
             pid = fork();
             //setenv("REQUEST_METHOD", "GET", 1);
             if(pid < 0){
+              
               std::cerr << "Fork error\n";
-            }
-            else if(pid == 0){
+            }else if(pid == 0){
 
               int fd = socket_.native_handle();
               dup2(fd, STDIN_FILENO);
@@ -85,13 +91,10 @@ private:
               dup2(STDOUT_FILENO, STDERR_FILENO);
               
               // execute cgi program            
-              std::string path = "./printenv.cgi";
+              std::string path = "." + REQUEST_URI;
               std::cout << "HTTP/1.1 200 OK\r\n";
               
-              //std::string REQUEST_URI = getenv( REQUEST_URI.c_str());
-             
-              //std::cout<<  REQUEST_URI << std::endl;
-              execl(path.c_str(), "printenv", NULL);
+              execl(path.c_str(), REQUEST_URI.c_str(), NULL);
               std::cerr << "ERROR: exec error" << std::endl;
               exit(0);
             }
