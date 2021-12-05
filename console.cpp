@@ -2,31 +2,45 @@
 #include <iostream>
 #include <memory>
 #include <utility>
+#include <fstream>
 #include <boost/asio.hpp>
+#include <boost/algorithm/string.hpp>
 
-using boost::asio::ip::tcp;
+
+boost::asio::io_service ioservice;
+boost::asio::ip::tcp::resolver resolver{ioservice};
+boost::asio::ip::tcp::socket tcp_socket{ioservice};
+
+std::array<char, 4096> bytes;
 bool has_client[5];
 std::string Host[5], Port[5], FileName[5];
 
+std::vector<std::string> input;
+std::ifstream in;
+
+void read_handler(const boost::system::error_code &ec, std::size_t bytes_transferred);
+void do_read();
+
 void parse_string(std::string query_string){
 
+    std::string temp;
+    std::replace(query_string.begin(), query_string.end(), '&', ' ');
+	std::istringstream iss(query_string);
+
+    if (query_string.length() == 0) return;
+
     for(int i=0;i<5;++i){
-        has_client[i]=false;
+        iss >> temp; 
+        if (temp.length() != 0) Host[i] = temp.substr(3, temp.length() - 1);
+        iss >> temp;
+        if (temp.length() != 0) Port[i] = temp.substr(3, temp.length() - 1);
+        iss >> temp;
+		if (temp.length() != 0) FileName[i] = temp.substr(3, temp.length() - 1);
+
+        if(Host[i].length() != 0 && Port[i].length() != 0 && FileName[i].length())  has_client[i]=true;
     }
-    has_client[0] = true; has_client[1] = true;
 
-    Host[0] = "nplinux1.cs.nctu.edu.tw";
-    Host[1] = "nplinux1.cs.nctu.edu.tw";
-
-    Port[0] = "9999";
-    Port[1] = "9998";
-
-    FileName[0] = "t1.txt";
-    FileName[1] = "t3.txt";
 }
-
-
-
 
 void send_inihtml(){
 
@@ -115,6 +129,107 @@ void send_inihtml(){
     std::cout<<initHTML;
 }
 
+void write_handler(const boost::system::error_code &ec, std::size_t bytes_transferred){
+
+    if(!ec) tcp_socket.async_read_some(boost::asio::buffer(bytes), read_handler);
+}
+
+void do_write(){
+    std::string cmd, html_cmd;
+
+    //cmd = input[0];
+    
+    
+
+    if (in.is_open()){
+
+		getline(in, cmd);
+	}
+    cmd += "\n";
+
+    //input.erase(input.begin(), input.begin() + 1);
+    
+    //cmd = "ls\n";
+
+    html_cmd = cmd;
+	boost::algorithm::replace_all(html_cmd, "\n", "&NewLine;");
+	boost::algorithm::replace_all(html_cmd, "\r", "");
+	boost::algorithm::replace_all(html_cmd, "\"", "&quot;");
+	html_cmd = std::string("<script>document.getElementById(\"") + std::string("s") + std::to_string(1) + "\").innerHTML += \"<b>" + html_cmd + "</b>\";</script>";
+	//fflush(stdout);
+    std::cout << html_cmd << std::endl;
+    //fflush(stdout);
+
+
+    boost::asio::async_write(tcp_socket, boost::asio::buffer(cmd, cmd.length()), read_handler);
+
+}
+
+void read_handler(const boost::system::error_code &ec, std::size_t bytes_transferred){
+
+    if(!ec){
+
+        std::string str = bytes.data();
+        boost::algorithm::replace_all(str, "\n", "&NewLine;");
+		boost::algorithm::replace_all(str, "\r", "");
+		boost::algorithm::replace_all(str, "\"", "&quot;");			
+        std::string html_str = std::string("<script>document.getElementById(\"") + std::string("s") + std::to_string(1)+"\").innerHTML += \"" + str + "\";</script>";
+		//fflush(stdout);
+        std::cout << html_str <<std::endl;
+        //fflush(stdout);
+        //std::cout.write(bytes.data(), bytes_transferred);
+        bytes.fill('\0');
+
+        if(str.find("% ") != std::string::npos){ // read %
+            
+            do_write(); // prepare next
+			
+		}else{  //get result
+            
+            do_read();
+            //tcp_socket.async_read_some(boost::asio::buffer(bytes), read_handler);
+            
+		}
+    } 
+
+}
+
+void do_read(){
+
+    bytes.fill('\0');
+    tcp_socket.async_read_some(boost::asio::buffer(bytes), read_handler);
+}
+
+void connect_handler(const boost::system::error_code &ec){
+
+    if(!ec) do_read();
+    //if(!ec) tcp_socket.async_read_some(boost::asio::buffer(bytes), read_handler);   
+}
+
+void resolve_handler(const boost::system::error_code &ec, boost::asio::ip::tcp::resolver::iterator it){
+
+    if(!ec) tcp_socket.async_connect(*it, connect_handler);
+}
+
+std::vector<std::string> get_file(){
+
+    std::ifstream in;
+    std::vector<std::string> res;
+    std::string tmp;
+	
+    in.open("../test_case/t1.txt");
+
+	if (in.is_open()){
+
+		while(getline(in, tmp)){
+
+            res.push_back(tmp + "\n");
+		}	
+	}
+
+    return res;
+}
+
 int main(){
 
     std::string query_string = getenv("QUERY_STRING");
@@ -124,6 +239,13 @@ int main(){
     std::cout << query_string;
 
     send_inihtml();
+
+    in.open("../test_case/t2.txt");
+    //input = get_file();
+
+    boost::asio::ip::tcp::resolver::query q{ Host[0], Port[0]};
+    resolver.async_resolve( q, resolve_handler);
+    ioservice.run();
 
     return 0;
 }
