@@ -248,7 +248,7 @@ class ShellSession :
     public:
         ShellSession(int n): tcp_socket(ioservice), resolver(ioservice), num(n)
         {
-            in.open("../test_case/" + FileName[num]);
+            in.open("./test_case/" + FileName[num]);
         }
 
         void start(){ do_resolve();}
